@@ -1,0 +1,26 @@
+services:
+
+  retail-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: retail-app:${APP_VERSION:-4.2.0}
+
+    container_name: retail-app
+
+    ports:
+      - "8081:3000"
+
+    environment:
+      APP_VERSION: ${APP_VERSION:-4.2.0}
+      ENVIRONMENT: ${ENVIRONMENT:-UAT}
+      PAYMENT_STATUS: ${PAYMENT_STATUS:-OK}
+      HEALTH_STATUS: ${HEALTH_STATUS:-OK}
+
+    networks:
+      - application-network
+
+networks:
+  application-network:
+    driver: bridge
