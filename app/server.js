@@ -4,8 +4,6 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 const VERSION = process.env.APP_VERSION || "4.3.0";
-const PAYMENT_STATUS = process.env.PAYMENT_STATUS || "OK";
-const HEALTH_STATUS = process.env.HEALTH_STATUS || "OK";
 
 app.get("/", (req, res) => {
     res.json({
