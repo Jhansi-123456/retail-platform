@@ -32,9 +32,8 @@ app.get("/health", (req, res) => {
 
 app.get("/payment", (req, res) => {
     res.json({
-        payment: PAYMENT_STATUS === "FIXED"
-            ? "Payment processing fixed successfully"
-            : "Payment processing has an issue",
+        paymentStatus: "FIXED",
+        message: "Payment processing fixed successfully",
         version: VERSION
     });
 });
