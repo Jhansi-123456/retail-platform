@@ -3,7 +3,7 @@ const express = require("express");
 const app = express();
 
 const PORT = process.env.PORT || 3000;
-const VERSION = process.env.APP_VERSION || "4.2.0";
+const VERSION = process.env.APP_VERSION || "4.3.0-release";
 const PAYMENT_STATUS = process.env.PAYMENT_STATUS || "OK";
 const HEALTH_STATUS = process.env.HEALTH_STATUS || "OK";
 
