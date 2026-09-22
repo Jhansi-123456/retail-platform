@@ -88,7 +88,7 @@ stages {
 
                 } else if (params.ENVIRONMENT == 'UAT') {
 
-                    env.DEPLOY_BRANCH = 'release/4.3.0'
+                    env.DEPLOY_BRANCH = 'release'
                     env.APP_CONTAINER = 'customer-app-uat'
                     env.DB_CONTAINER = 'customer-db-uat'
                     env.NETWORK_NAME = 'customer-uat-net'
