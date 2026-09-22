@@ -53,7 +53,7 @@ pipeline {
                         error("Invalid action selected")
                     }
 
-                    if (!(params.VERSION ==~ /^[0-9]+\\.[0-9]+\\.[0-9]+$/)) {
+                    if (!(params.VERSION ==~ /^[0-9]+\.[0-9]+\.[0-9]+$/)) {
                         error("Invalid VERSION. Use format X.Y.Z")
                     }
 
