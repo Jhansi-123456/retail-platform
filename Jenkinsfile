@@ -136,24 +136,31 @@ Run Tests   : ${params.RUN_TESTS}
         }
 
         stage('Run Tests') {
-            when {
-                expression {
-                    params.RUN_TESTS == 'YES'
-                }
-            }
-
-            steps {
-                bat """
-                    if exist app\\node_modules\\.bin\\jest.cmd (
-                        app\\node_modules\\.bin\\jest.cmd --config=jest.config.js
-                    ) else (
-                        echo Jest dependencies not found.
-                        exit /b 1
-                    )
-                """
-            }
+    when {
+        expression {
+            params.RUN_TESTS == 'YES'
         }
+    }
 
+    steps {
+        bat """
+            echo ========================================
+            echo INSTALLING NODE DEPENDENCIES
+            echo ========================================
+
+            cd app
+            npm ci
+
+            cd ..
+
+            echo ========================================
+            echo RUNNING TESTS
+            echo ========================================
+
+            app\\node_modules\\.bin\\jest.cmd --config=jest.config.js
+        """
+    }
+}
         stage('Build Docker Image') {
             when {
                 expression {
