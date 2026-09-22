@@ -1,6 +1,5 @@
 pipeline {
 
-```
 agent any
 
 parameters {
@@ -106,31 +105,16 @@ stages {
                     env.HOST_PORT = '8081'
                 }
 
-                echo """
-```
-
-========================================
-RESOLVED DEPLOYMENT CONFIGURATION
-=================================
-
-Environment : ${params.ENVIRONMENT}
-Branch      : ${env.DEPLOY_BRANCH}
-Version     : ${params.VERSION}
-Action      : ${params.ACTION}
-App         : ${env.APP_CONTAINER}
-Database    : ${env.DB_CONTAINER}
-Network     : ${env.NETWORK_NAME}
-Volume      : ${env.DB_VOLUME}
-Host Port   : ${env.HOST_PORT}
-Run Tests   : ${params.RUN_TESTS}
-=================================
-
-"""
-}
-}
+ echo "Environment: ${params.ENVIRONMENT}"
+echo "Branch: ${env.DEPLOY_BRANCH}"
+echo "Application: ${env.APP_CONTAINER}"
+echo "Database: ${env.DB_CONTAINER}"
+echo "Network: ${env.NETWORK_NAME}"
+echo "Host Port: ${env.HOST_PORT}"
+        }
+    }
 }
 
-```
     stage('Checkout Selected Branch') {
         steps {
             bat """
@@ -387,6 +371,5 @@ post {
         echo "Pipeline completed successfully."
     }
 }
-```
 
 }
