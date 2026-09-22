@@ -1,3 +1,4 @@
+```groovy
 pipeline {
 
     agent any
@@ -84,11 +85,11 @@ pipeline {
                         env.DB_CONTAINER = 'customer-db-dev'
                         env.NETWORK_NAME = 'customer-dev-net'
                         env.DB_VOLUME = 'customer-db-dev-data'
-                        env.HOST_PORT = '8081'
+                        env.HOST_PORT = '8083'
 
                     } else if (params.ENVIRONMENT == 'UAT') {
 
-                        env.DEPLOY_BRANCH = 'release'
+                        env.DEPLOY_BRANCH = 'release/4.3.0'
                         env.APP_CONTAINER = 'customer-app-uat'
                         env.DB_CONTAINER = 'customer-db-uat'
                         env.NETWORK_NAME = 'customer-uat-net'
@@ -102,7 +103,7 @@ pipeline {
                         env.DB_CONTAINER = 'customer-db-prod'
                         env.NETWORK_NAME = 'customer-prod-net'
                         env.DB_VOLUME = 'customer-db-prod-data'
-                        env.HOST_PORT = '8083'
+                        env.HOST_PORT = '8081'
                     }
 
                     echo """
@@ -136,31 +137,32 @@ Run Tests   : ${params.RUN_TESTS}
         }
 
         stage('Run Tests') {
-    when {
-        expression {
-            params.RUN_TESTS == 'YES'
+            when {
+                expression {
+                    params.RUN_TESTS == 'YES'
+                }
+            }
+
+            steps {
+                bat """
+                    echo ========================================
+                    echo INSTALLING NODE DEPENDENCIES
+                    echo ========================================
+
+                    cd app
+                    npm ci
+
+                    cd ..
+
+                    echo ========================================
+                    echo RUNNING TESTS
+                    echo ========================================
+
+                    app\\node_modules\\.bin\\jest.cmd --config=jest.config.js
+                """
+            }
         }
-    }
 
-    steps {
-        bat """
-            echo ========================================
-            echo INSTALLING NODE DEPENDENCIES
-            echo ========================================
-
-            cd app
-            npm ci
-
-            cd ..
-
-            echo ========================================
-            echo RUNNING TESTS
-            echo ========================================
-
-            app\\node_modules\\.bin\\jest.cmd --config=jest.config.js
-        """
-    }
-}
         stage('Build Docker Image') {
             when {
                 expression {
@@ -228,6 +230,7 @@ Run Tests   : ${params.RUN_TESTS}
             steps {
                 bat """
                     timeout /t 15 /nobreak
+
                     docker exec ${env.DB_CONTAINER} mysqladmin ping -h localhost -u root -pRootPass123! --silent
 
                     if errorlevel 1 (
@@ -288,7 +291,7 @@ Run Tests   : ${params.RUN_TESTS}
 
                     echo Checking application health...
 
-                    curl.exe -f http://localhost:${env.HOST_PORT}/health
+                    curl.exe -f http://127.0.0.1:${env.HOST_PORT}/health
 
                     if errorlevel 1 (
                         echo Application health check FAILED.
@@ -309,7 +312,7 @@ Run Tests   : ${params.RUN_TESTS}
 
             steps {
                 bat """
-                    curl.exe -f http://localhost:${env.HOST_PORT}/db-test
+                    curl.exe -f http://127.0.0.1:${env.HOST_PORT}/db-test
 
                     if errorlevel 1 (
                         echo Database reachability FAILED.
@@ -339,7 +342,7 @@ Run Tests   : ${params.RUN_TESTS}
                     echo Application: ${env.APP_CONTAINER}
                     echo Database: ${env.DB_CONTAINER}
                     echo Network: ${env.NETWORK_NAME}
-                    echo URL: http://localhost:${env.HOST_PORT}
+                    echo URL: http://127.0.0.1:${env.HOST_PORT}
                     echo ========================================
                 """
             }
@@ -378,3 +381,4 @@ Run Tests   : ${params.RUN_TESTS}
         }
     }
 }
+```
