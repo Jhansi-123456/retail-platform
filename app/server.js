@@ -141,8 +141,12 @@ app.get("/orders", (req, res) => {
     });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(
-        `Retail Platform ${VERSION} running on port ${PORT} in ${ENVIRONMENT}`
-    );
-});
+if (require.main === module) {
+    app.listen(PORT, "0.0.0.0", () => {
+        console.log(
+            `Retail Platform ${VERSION} running on port ${PORT} in ${ENVIRONMENT}`
+        );
+    });
+}
+
+module.exports = app;
