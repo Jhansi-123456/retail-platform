@@ -1,12 +1,13 @@
 {
   "name": "retail-platform",
-  "version": "4.2.0",
-  "description": "Retail platform payment application",
+  "version": "5.0.0",
+  "description": "Retail platform customer application",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "mysql2": "^3.11.5"
   }
 }
