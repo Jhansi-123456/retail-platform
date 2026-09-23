@@ -1,4 +1,3 @@
-```groovy
 pipeline {
 
     agent any
@@ -32,7 +31,7 @@ pipeline {
         choice(
             name: 'PRODUCTION_CONFIRM',
             choices: ['NO', 'YES'],
-            description: 'Required YES for production deployment'
+            description: 'Required YES for production deployment or rollback'
         )
     }
 
@@ -59,10 +58,9 @@ pipeline {
                     }
 
                     if (params.ENVIRONMENT == 'PRODUCTION' &&
-                        params.ACTION == 'DEPLOY' &&
                         params.PRODUCTION_CONFIRM != 'YES') {
 
-                        error("Production deployment requires PRODUCTION_CONFIRM=YES")
+                        error("Production deployment or rollback requires PRODUCTION_CONFIRM=YES")
                     }
 
                     if (params.ENVIRONMENT != 'PRODUCTION' &&
@@ -70,6 +68,15 @@ pipeline {
 
                         error("PRODUCTION_CONFIRM=YES is only valid for PRODUCTION")
                     }
+
+                    echo "========================================"
+                    echo "PARAMETER VALIDATION PASSED"
+                    echo "========================================"
+                    echo "Environment : ${params.ENVIRONMENT}"
+                    echo "Action      : ${params.ACTION}"
+                    echo "Version     : ${params.VERSION}"
+                    echo "Run Tests   : ${params.RUN_TESTS}"
+                    echo "========================================"
                 }
             }
         }
@@ -89,7 +96,7 @@ pipeline {
 
                     } else if (params.ENVIRONMENT == 'UAT') {
 
-                        env.DEPLOY_BRANCH = 'release/4.3.0'
+                        env.DEPLOY_BRANCH = 'release'
                         env.APP_CONTAINER = 'customer-app-uat'
                         env.DB_CONTAINER = 'customer-db-uat'
                         env.NETWORK_NAME = 'customer-uat-net'
@@ -106,22 +113,17 @@ pipeline {
                         env.HOST_PORT = '8081'
                     }
 
-                    echo """
-========================================
-RESOLVED DEPLOYMENT CONFIGURATION
-========================================
-Environment : ${params.ENVIRONMENT}
-Branch      : ${env.DEPLOY_BRANCH}
-Version     : ${params.VERSION}
-Action      : ${params.ACTION}
-App         : ${env.APP_CONTAINER}
-Database    : ${env.DB_CONTAINER}
-Network     : ${env.NETWORK_NAME}
-Volume      : ${env.DB_VOLUME}
-Host Port   : ${env.HOST_PORT}
-Run Tests   : ${params.RUN_TESTS}
-========================================
-"""
+                    echo "========================================"
+                    echo "ENVIRONMENT CONFIGURATION"
+                    echo "========================================"
+                    echo "Environment : ${params.ENVIRONMENT}"
+                    echo "Branch      : ${env.DEPLOY_BRANCH}"
+                    echo "Application : ${env.APP_CONTAINER}"
+                    echo "Database    : ${env.DB_CONTAINER}"
+                    echo "Network     : ${env.NETWORK_NAME}"
+                    echo "DB Volume   : ${env.DB_VOLUME}"
+                    echo "Host Port   : ${env.HOST_PORT}"
+                    echo "========================================"
                 }
             }
         }
@@ -129,9 +131,17 @@ Run Tests   : ${params.RUN_TESTS}
         stage('Checkout Selected Branch') {
             steps {
                 bat """
+                    echo ========================================
+                    echo CHECKING OUT SELECTED BRANCH
+                    echo ========================================
+
                     git fetch --all
                     git checkout ${env.DEPLOY_BRANCH}
                     git pull origin ${env.DEPLOY_BRANCH}
+
+                    echo.
+                    echo Current branch:
+                    git branch --show-current
                 """
             }
         }
@@ -151,7 +161,6 @@ Run Tests   : ${params.RUN_TESTS}
 
                     cd app
                     npm ci
-
                     cd ..
 
                     echo ========================================
@@ -172,7 +181,15 @@ Run Tests   : ${params.RUN_TESTS}
 
             steps {
                 bat """
+                    echo ========================================
+                    echo BUILDING DOCKER IMAGE
+                    echo ========================================
+
                     docker build -t ${IMAGE_NAME}:${params.VERSION} .
+
+                    echo.
+                    echo Docker image:
+                    docker images ${IMAGE_NAME}
                 """
             }
         }
@@ -180,14 +197,25 @@ Run Tests   : ${params.RUN_TESTS}
         stage('Validate Docker Network') {
             steps {
                 bat """
+                    echo ========================================
+                    echo VALIDATING DOCKER NETWORK
+                    echo ========================================
+
                     docker network inspect ${env.NETWORK_NAME} >nul 2>&1
 
                     if errorlevel 1 (
-                        echo Network ${env.NETWORK_NAME} does not exist.
-                        exit /b 1
+                        echo Network does not exist.
+                        echo Creating ${env.NETWORK_NAME}...
+
+                        docker network create ${env.NETWORK_NAME}
+
+                        if errorlevel 1 (
+                            echo Failed to create Docker network.
+                            exit /b 1
+                        )
                     )
 
-                    echo Network ${env.NETWORK_NAME} exists.
+                    echo Network ${env.NETWORK_NAME} is ready.
                 """
             }
         }
@@ -201,11 +229,23 @@ Run Tests   : ${params.RUN_TESTS}
 
             steps {
                 bat """
+                    echo ========================================
+                    echo DEPLOYING DATABASE
+                    echo ========================================
+
                     docker inspect ${env.DB_CONTAINER} >nul 2>&1
 
                     if not errorlevel 1 (
+
+                        echo Database container already exists.
+                        echo Starting database container...
+
                         docker start ${env.DB_CONTAINER}
+
                     ) else (
+
+                        echo Creating database container...
+
                         docker run -d ^
                           --name ${env.DB_CONTAINER} ^
                           --network ${env.NETWORK_NAME} ^
@@ -216,6 +256,11 @@ Run Tests   : ${params.RUN_TESTS}
                           -e MYSQL_PASSWORD=CustomerPass123! ^
                           mysql:8.0
                     )
+
+                    echo.
+                    echo Database container status:
+
+                    docker ps -a --filter "name=${env.DB_CONTAINER}"
                 """
             }
         }
@@ -229,12 +274,22 @@ Run Tests   : ${params.RUN_TESTS}
 
             steps {
                 bat """
-                    timeout /t 15 /nobreak
+                    echo ========================================
+                    echo WAITING FOR DATABASE
+                    echo ========================================
 
-                    docker exec ${env.DB_CONTAINER} mysqladmin ping -h localhost -u root -pRootPass123! --silent
+                    ping -n 16 127.0.0.1 >nul
+
+                    docker exec ${env.DB_CONTAINER} ^
+                    mysqladmin ping ^
+                    -h localhost ^
+                    -u root ^
+                    -pRootPass123! ^
+                    --silent
 
                     if errorlevel 1 (
                         echo Database is not ready.
+                        echo Database health check FAILED.
                         exit /b 1
                     )
 
@@ -252,6 +307,10 @@ Run Tests   : ${params.RUN_TESTS}
 
             steps {
                 bat """
+                    echo ========================================
+                    echo DEPLOYING APPLICATION
+                    echo ========================================
+
                     docker rm -f ${env.APP_CONTAINER} >nul 2>&1
 
                     docker run -d ^
@@ -265,6 +324,11 @@ Run Tests   : ${params.RUN_TESTS}
                       -e DB_PASSWORD=CustomerPass123! ^
                       -e DB_NAME=customerdb ^
                       ${IMAGE_NAME}:${params.VERSION}
+
+                    echo.
+                    echo Application container status:
+
+                    docker ps -a --filter "name=${env.APP_CONTAINER}"
                 """
             }
         }
@@ -278,18 +342,29 @@ Run Tests   : ${params.RUN_TESTS}
 
             steps {
                 bat """
-                    timeout /t 10 /nobreak
+                    echo ========================================
+                    echo VALIDATING APPLICATION DEPLOYMENT
+                    echo ========================================
 
-                    echo Checking containers...
+                    ping -n 11 127.0.0.1 >nul
+
+                    echo.
+                    echo Checking application container:
 
                     docker ps --filter "name=${env.APP_CONTAINER}"
+
+                    echo.
+                    echo Checking database container:
+
                     docker ps --filter "name=${env.DB_CONTAINER}"
 
-                    echo Checking network...
+                    echo.
+                    echo Checking Docker network:
 
                     docker network inspect ${env.NETWORK_NAME}
 
-                    echo Checking application health...
+                    echo.
+                    echo Checking application health:
 
                     curl.exe -f http://127.0.0.1:${env.HOST_PORT}/health
 
@@ -298,6 +373,7 @@ Run Tests   : ${params.RUN_TESTS}
                         exit /b 1
                     )
 
+                    echo.
                     echo Application health check PASSED.
                 """
             }
@@ -312,6 +388,10 @@ Run Tests   : ${params.RUN_TESTS}
 
             steps {
                 bat """
+                    echo ========================================
+                    echo VALIDATING DATABASE REACHABILITY
+                    echo ========================================
+
                     curl.exe -f http://127.0.0.1:${env.HOST_PORT}/db-test
 
                     if errorlevel 1 (
@@ -319,6 +399,7 @@ Run Tests   : ${params.RUN_TESTS}
                         exit /b 1
                     )
 
+                    echo.
                     echo Database reachability PASSED.
                 """
             }
@@ -335,14 +416,18 @@ Run Tests   : ${params.RUN_TESTS}
                 bat """
                     echo.
                     echo ========================================
-                    echo DEPLOYMENT SUCCESSFUL
+                    echo       DEPLOYMENT SUCCESSFUL
                     echo ========================================
-                    echo Environment: ${params.ENVIRONMENT}
-                    echo Version: ${params.VERSION}
-                    echo Application: ${env.APP_CONTAINER}
-                    echo Database: ${env.DB_CONTAINER}
-                    echo Network: ${env.NETWORK_NAME}
-                    echo URL: http://127.0.0.1:${env.HOST_PORT}
+
+                    echo Environment : ${params.ENVIRONMENT}
+                    echo Version     : ${params.VERSION}
+                    echo Branch      : ${env.DEPLOY_BRANCH}
+                    echo Application : ${env.APP_CONTAINER}
+                    echo Database    : ${env.DB_CONTAINER}
+                    echo Network     : ${env.NETWORK_NAME}
+                    echo Host Port   : ${env.HOST_PORT}
+                    echo URL         : http://127.0.0.1:${env.HOST_PORT}
+
                     echo ========================================
                 """
             }
@@ -358,27 +443,132 @@ Run Tests   : ${params.RUN_TESTS}
             steps {
                 script {
 
-                    if (params.ENVIRONMENT == 'PRODUCTION') {
-                        error("Production rollback requires a previous production version and must be handled using the approved rollback version.")
-                    }
+                    echo "========================================"
+                    echo "ROLLBACK REQUESTED"
+                    echo "========================================"
 
-                    echo "Rollback requested for ${params.ENVIRONMENT}"
-                    echo "Use the previous known-good VERSION for rollback."
+                    echo "Environment     : ${params.ENVIRONMENT}"
+                    echo "Rollback Version: ${params.VERSION}"
+                    echo "Application     : ${env.APP_CONTAINER}"
+                    echo "Network         : ${env.NETWORK_NAME}"
+
+                    if (params.ENVIRONMENT == 'PRODUCTION' &&
+                        params.PRODUCTION_CONFIRM != 'YES') {
+
+                        error("Production rollback requires PRODUCTION_CONFIRM=YES")
+                    }
                 }
+
+                bat """
+                    echo ========================================
+                    echo CHECKING ROLLBACK IMAGE
+                    echo ========================================
+
+                    docker image inspect ${IMAGE_NAME}:${params.VERSION} >nul 2>&1
+
+                    if errorlevel 1 (
+                        echo Rollback image ${IMAGE_NAME}:${params.VERSION} does not exist.
+                        echo Cannot perform rollback.
+                        exit /b 1
+                    )
+
+                    echo Rollback image found.
+
+                    echo ========================================
+                    echo CHECKING DATABASE CONTAINER
+                    echo ========================================
+
+                    docker inspect ${env.DB_CONTAINER} >nul 2>&1
+
+                    if errorlevel 1 (
+                        echo Database container does not exist.
+                        echo Rollback cannot continue.
+                        exit /b 1
+                    )
+
+                    docker start ${env.DB_CONTAINER} >nul 2>&1
+
+                    echo Database container is available.
+
+                    echo ========================================
+                    echo STOPPING CURRENT APPLICATION
+                    echo ========================================
+
+                    docker rm -f ${env.APP_CONTAINER} >nul 2>&1
+
+                    echo ========================================
+                    echo STARTING ROLLBACK VERSION
+                    echo ========================================
+
+                    docker run -d ^
+                      --name ${env.APP_CONTAINER} ^
+                      --network ${env.NETWORK_NAME} ^
+                      -p ${env.HOST_PORT}:3000 ^
+                      -e ENVIRONMENT=${params.ENVIRONMENT} ^
+                      -e APP_VERSION=${params.VERSION} ^
+                      -e DB_HOST=${env.DB_CONTAINER} ^
+                      -e DB_USER=customeruser ^
+                      -e DB_PASSWORD=CustomerPass123! ^
+                      -e DB_NAME=customerdb ^
+                      ${IMAGE_NAME}:${params.VERSION}
+
+                    echo.
+                    echo ========================================
+                    echo WAITING FOR ROLLBACK APPLICATION
+                    echo ========================================
+
+                    ping -n 11 127.0.0.1 >nul
+
+                    echo.
+                    echo Checking rollback container:
+
+                    docker ps --filter "name=${env.APP_CONTAINER}"
+
+                    echo.
+                    echo Checking rollback health:
+
+                    curl.exe -f http://127.0.0.1:${env.HOST_PORT}/health
+
+                    if errorlevel 1 (
+                        echo Rollback health check FAILED.
+                        exit /b 1
+                    )
+
+                    echo.
+                    echo ========================================
+                    echo       ROLLBACK SUCCESSFUL
+                    echo ========================================
+
+                    echo Environment : ${params.ENVIRONMENT}
+                    echo Version     : ${params.VERSION}
+                    echo Application : ${env.APP_CONTAINER}
+                    echo Database    : ${env.DB_CONTAINER}
+                    echo Network     : ${env.NETWORK_NAME}
+                    echo URL         : http://127.0.0.1:${env.HOST_PORT}
+
+                    echo ========================================
+                """
             }
         }
     }
 
     post {
 
-        failure {
-            echo "Deployment FAILED."
-            echo "Review the Jenkins console output for the failure."
+        success {
+            echo "========================================"
+            echo "PIPELINE COMPLETED SUCCESSFULLY"
+            echo "========================================"
         }
 
-        success {
-            echo "Pipeline completed successfully."
+        failure {
+            echo "========================================"
+            echo "PIPELINE FAILED"
+            echo "========================================"
+            echo "Review the Jenkins console output."
+        }
+
+        always {
+            echo "Jenkins pipeline execution completed."
         }
     }
 }
-```
